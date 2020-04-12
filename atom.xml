@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-  <title>Tao Hongyu&#39;s Blog</title>
+  <title>洛克的空间</title>
   
   <link href="/atom.xml" rel="self"/>
   
@@ -9,7 +9,7 @@
   <id>http://hytaoist.github.io/</id>
   
   <author>
-    <name>Tao Hongyu</name>
+    <name>hytaoist</name>
     <email>hytaoist@foxmail.com</email>
   </author>
   
