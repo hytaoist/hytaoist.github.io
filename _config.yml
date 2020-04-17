@@ -23,6 +23,7 @@ plugins:             [jekyll-paginate, jekyll-sitemap, jekyll-feed, jekyll-seo-t
 title:		           '洛克的空间'
 description:	       '歌儿轻轻唱，风儿轻轻吹'
 author:              'hytaoist'
+url: '//hytaoist.github.io'
 
 # RSS 2.0 can be used instead of Atom by uncommenting following two lines
 #feed:
