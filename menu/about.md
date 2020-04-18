@@ -3,8 +3,6 @@ layout: page
 title: 
 ---
 
-### 简介
-
 男，90后，工程师。毕业于2016年，近两年都在从事与iOS应用开发相关的工作，做过电商与金融类的应用；喜欢优秀的应用，过去一年使用Swift开发应用，热爱Swift，热爱开源。现居住在上海。
 
 2019年工作之余，做了一个小型的GitHub App。[贝簇](https://apps.apple.com/cn/app/shellcluster/id1483737596)

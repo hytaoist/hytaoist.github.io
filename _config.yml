@@ -25,8 +25,8 @@ description:	       '歌儿轻轻唱，风儿轻轻吹'
 author:              'hytaoist'
 # url: '//hytaoist.github.io'
 
-baseurl: /
-url: http://hytaoist.github.io
+# baseurl: 
+# url: https://hytaoist.github.io
 
 # RSS 2.0 can be used instead of Atom by uncommenting following two lines
 #feed:
