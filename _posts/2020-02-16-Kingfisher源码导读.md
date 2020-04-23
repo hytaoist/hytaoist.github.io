@@ -2,12 +2,13 @@
 layout: post
 title: Kingfisher源码导读
 date: 2020-02-16 20:32
-tags: iOS
+tags: [源码导读]
 categories: [iOS]
 ---
 
 ## 前言
 在使用第三方库的时候，往往只用其功能，很少去关注背后的实现细节。本文从源码（Kingfisher v5.13.0）角度，学习与研究Kingfisher背后实现细节。
+
 <!-- more-->
 ### kf属性
 kf是计算属性，用以返回包裹系统类UIIMageView，UIButton，NSButton的KingfisherWrapper，也就是用struct装饰泛型Base。

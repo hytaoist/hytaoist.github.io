@@ -2,21 +2,22 @@
 layout: post
 title: Alamofire源码导读
 date: 2020-04-08 10:22
-tags: iOS
+tags: [源码导读]
 categories: [iOS]
 ---
 
 本文基于Alamofire v5.0.5，地址：https://github.com/Alamofire/Alamofire
 
+<!-- more-->
 系统的API发起网络请求一般是通过获取一个URLSessionTask的实例，调用resume()方法即可发起一个网络请求；在iOS中构建网络应用，实际是使用的URLSessionTask的子类（URLSessionDataTask，URLSessionDownloadTask，URLSessionUploadTask，URLSessionStreamTask，URLSessionWebsocketTask）。
 
 执行一次网络请求的过程：创建会话（**URLSession**）-> 生成请求任务（**URLSessionTask**）-> 开启请求（**resume()**）-> 响应了之后回调。Alamofire这个库在于其简洁的API，使用者不用再去自己创建会话及实现其代理，只需要传入请求的URL及响应的回调，就可以完成一次请求。
 
 ##  结构
 Alamofire中定义的类图
-![](https://raw.githubusercontent.com/hytaoist/oss/master/uPic/Alamofire的类图.png)
+![](https://hy-blog-pic.oss-cn-shanghai.aliyuncs.com/uPic/Alamofire的类图.png)
 整个Alamofire的设计非常简洁，其中定义的类除了需要进行缓存的请求，会话是使用class类型，其余几乎都是采用协议与结构体实现。完整的将网络请求，URL校验，失败重试机制，请求缓存，错误机制，响应解析等功能模块融入其中。
-![](https://raw.githubusercontent.com/hytaoist/oss/master/uPic/Alamofire_Process.png)
+![](https://hy-blog-pic.oss-cn-shanghai.aliyuncs.com/uPic/Alamofire_Process.png)
 
 
 
@@ -305,7 +306,7 @@ didReceive的逻辑是将元数据拼接 / 添加在protectedData中，并计算
 元数据处理是一个将服务器返回的元数据处理为DataResponse类型的过程。在Alamofire中，无论当前请求是成功与否，执行fisnish方法的时候，都会去执行
 processNextResponseSerializer，在这个方法中会通过当前请求实例的nextResponseSerializer方法从请求实例的状态管理器里获取responseSerializer闭包，进行异步调用处理，元数据的处理也包含在其中。
 
-![](https://raw.githubusercontent.com/hytaoist/oss/master/uPic/AF_响应处理序列.png)
+![](https://hy-blog-pic.oss-cn-shanghai.aliyuncs.com/uPic/AF_响应处理序列.png)
 
 请求实例的responseSerializer闭包是如何被添加进状态管理器的responseSerializers数组中的？
 

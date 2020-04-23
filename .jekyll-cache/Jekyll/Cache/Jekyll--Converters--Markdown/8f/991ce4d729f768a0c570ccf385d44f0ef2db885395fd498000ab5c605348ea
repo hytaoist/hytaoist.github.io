@@ -1,0 +1,27 @@
+I"5	<p>上个月，我加入了Apple Developer Program。在10月18日提交了ShellCluster的第一版，10月20日的时候应用通过审核，上线App Store。这一切看起来正常。</p>
+
+<!-- more-->
+<p>应用发布后，有收到用户反馈。随后，我提交更新审核；但遭遇了苹果的拒绝。接着又遭遇了苹果的账号调查，以及说我的应用有隐藏功能（部分功能会在审核时隐藏，发布后会显示）。很明显这个是在胡乱甩锅，这样的操作实际是在伤害开发者。第二天，我回复审核团队，主要是：</p>
+
+<ul>
+  <li>ShellCluster遵循App Review Guidelines, 没有独立的服务器，也没有隐藏功能</li>
+  <li>我是一个才加入Apple Developer Program的开发者，不会做违反应用设计原则和当地法律的应用</li>
+  <li>希望能尽快处理账号被误调查的问题</li>
+</ul>
+
+<p>第二天，苹果回复依旧是一封模版邮件。</p>
+<blockquote>
+  <p>Hello, 
+We are unable to continue this app’s review because your Apple Developer Program account  is currently under investigation for not following the App Store Review Guidelines’ Developer Code of Conduct.</p>
+</blockquote>
+
+<p>这种误伤的操作不在少数，在V2EX上有看到被苹果调查了45天上架的<strong>伟途亦可思</strong>; 国外也还有直接被苹果上架的<strong>FSNotes</strong>, 想到这里, 我心里有点些许安慰。与苹果技术支持人员反馈，与审核团队沟通，都被告知等待苹果的调查结果，别无他法。</p>
+
+<h4 id="后续">后续</h4>
+<p>一个月后，苹果依旧没有给任何反馈消息。我试着给Apple Review Team发邮件，讲述关于账号遭遇的问题与应用更新对于开发者的重要性。11月26日，Apple回复，结束了对我开发者账户的调查，可以正常提交审核。复盘此次作为一个新开发者也被账户调查的遭遇，苹果对生态内的应用把控比较严格。对开发者严格，即对用户负责。</p>
+
+<ol>
+  <li><a href="https://github.com/glushchenko/fsnotes/issues/695">How Apple kills indie developers</a></li>
+  <li><a href="https://v2ex.com/t/610994#reply198">做了一个 V 站 iOS 客户端《伟途亦可思 - V2EX 创意工作者社区 》，今天终于上线了，希望大家能捧个场😃，多图预警</a></li>
+</ol>
+:ET

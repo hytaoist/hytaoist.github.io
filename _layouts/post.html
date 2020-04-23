@@ -2,38 +2,45 @@
 layout: default
 ---
 
-<h1>
-  {{ page.title }}
-</h1>
+<article class="post">
+  <h1>{{ page.title }}</h1>
 
-{% if page.image %}
-  <img src="{{ site.github.url }}/assets/img/{{ page.image }}">
-{% endif %}
+  <div>
+    <span class="date">
+      {{ page.date | date: "%Y-%m-%d" }}
+    </span>
 
-{{ content }}
+    <ul class="tag">
+      {% for tag in page.tags %}
+      <li>
+        <a href="{{ site.url }}{{ site.baseurl }}/tags#{{ tag }}">
+          {{ tag }}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
 
-<span class="post-date">
-  {{ site.data.settings.post_date_prefix }}
-  {% assign d = page.date | date: "%-d"  %}
-  {{ page.date | date: "%B" }}
-  {% case d %}
-    {% when '1' or '21' or '31' %}{{ d }}st
-    {% when '2' or '22' %}{{ d }}nd
-    {% when '3' or '23' %}{{ d }}rd
-    {% else %}{{ d }}th{% endcase %},
-  {{ page.date | date: "%Y" }}
-  by
-  {% if page.author %}
-    {{ page.author }}
-  {% else %}
-    {{ site.author }}
-  {% endif %}
-</span>
+  <div class="entry">
+    {{ content }}
+  </div>
 
-{% include social-sharing.html %}
+  <div class="pagination">
+    {% if page.previous.url %}
+      <span class="prev" >
+          <a href="{{ site.url }}{{ site.baseurl }}{{ page.previous.url }}">
+            &#xE000; {{ page.previous.title }}
+          </a>
+      </span>
+    {% endif %}
+    {% if page.next.url %}
+      <span class="next" >
+          <a href="{{ site.url }}{{ site.baseurl }}{{ page.next.url }}">
+            {{ page.next.title }} &#xE001;
+          </a>
+      </span>
+    {% endif %}
+  </div>
 
-{% include related-posts.html %}
-
-{% if site.data.settings.disqus.comments %}
   {% include disqus.html %}
-{% endif %}
+</article>

@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html>
+  <head>
+  <title>Alamofire源码导读 – 洛克 – Developer</title>
+
+      <meta charset="utf-8" />
+    <meta content='text/html; charset=utf-8' http-equiv='Content-Type'>
+    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0'>
+
+    
+    <meta name="description" content="本文基于Alamofire v5.0.5，地址：https://github.com/Alamofire/Alamofire
+" />
+    <meta property="og:description" content="本文基于Alamofire v5.0.5，地址：https://github.com/Alamofire/Alamofire
+" />
+    
+    <meta name="author" content="洛克" />
+
+    
+    <meta property="og:title" content="Alamofire源码导读" />
+    <meta property="twitter:title" content="Alamofire源码导读" />
+    
+  <!-- Async font loading -->
+<script>
+  window.WebFontConfig = {
+      custom: {
+          families: ['Spoqa Han Sans:100,300,400,700'],
+          urls: ['https://spoqa.github.io/spoqa-han-sans/css/SpoqaHanSans-kr.css']
+      },
+      timeout: 60000
+  };
+  (function(d) {
+      var wf = d.createElement('script'), s = d.scripts[0];
+      wf.src = 'https://ajax.googleapis.com/ajax/libs/webfont/1.5.18/webfont.js';
+      s.parentNode.insertBefore(wf, s);
+  })(document);
+</script>
+
+  <!--[if lt IE 9]>
+    <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
+
+  <link rel="stylesheet" type="text/css" href="/style.css" />
+  <link rel="alternate" type="application/rss+xml" title="洛克 - Developer" href="/feed.xml" />
+
+  <!-- Created with Jekyll Now - http://github.com/barryclark/jekyll-now -->
+</head>
+  <body>
+    <div class="wrapper-masthead">
+  <div class="container">
+    <header class="masthead clearfix">
+      
+        <a href="/" class="site-avatar"><img src="https://hy-blog-pic.oss-cn-shanghai.aliyuncs.com/uPic/hy.png" /></a>
+      
+
+      <div class="site-info">
+        <h1 class="site-name"><a href="/">洛克</a></h1>
+        <p class="site-description">Developer</p>
+      </div>
+
+      <nav>
+        
+        
+        <a href="/archive">归档</a>
+        
+        
+        
+        <a href="/tags">标签</a>
+        
+        
+        
+        <a href="/about">关于</a>
+        
+        
+      </nav>
+    </header>
+  </div>
+</div>
+
+    <div id="main" role="main" class="container">
+      <article class="post">
+  <h1>Alamofire源码导读</h1>
+
+  <div>
+    <span class="date">
+      2020-04-08
+    </span>
+
+    <ul class="tag">
+      
+      <li>
+        <a href="http://localhost:4000/tags#源码导读">
+          源码导读
+        </a>
+      </li>
+      
+    </ul>
+  </div>
+
+  <div class="entry">
+    <p>本文基于Alamofire v5.0.5，地址：https://github.com/Alamofire/Alamofire</p>
+
+<!-- more-->
+<p>系统的API发起网络请求一般是通过获取一个URLSessionTask的实例，调用resume()方法即可发起一个网络请求；在iOS中构建网络应用，实际是使用的URLSessionTask的子类（URLSessionDataTask，URLSessionDownloadTask，URLSessionUploadTask，URLSessionStreamTask，URLSessionWebsocketTask）。</p>
+
+<p>执行一次网络请求的过程：创建会话（<strong>URLSession</strong>）-&gt; 生成请求任务（<strong>URLSessionTask</strong>）-&gt; 开启请求（<strong>resume()</strong>）-&gt; 响应了之后回调。Alamofire这个库在于其简洁的API，使用者不用再去自己创建会话及实现其代理，只需要传入请求的URL及响应的回调，就可以完成一次请求。</p>
+
+<h2 id="结构">结构</h2>
+<p>Alamofire中定义的类图
+<img src="https://hy-blog-pic.oss-cn-shanghai.aliyuncs.com/uPic/Alamofire的类图.png" alt="" />
+整个Alamofire的设计非常简洁，其中定义的类除了需要进行缓存的请求，会话是使用class类型，其余几乎都是采用协议与结构体实现。完整的将网络请求，URL校验，失败重试机制，请求缓存，错误机制，响应解析等功能模块融入其中。
+<img src="https://hy-blog-pic.oss-cn-shanghai.aliyuncs.com/uPic/Alamofire_Process.png" alt="" /></p>
+
+<h2 id="请求任务的发送">请求任务的发送</h2>
+<p>在Alamofire中，对系统的网络操作的类都有进行封装，会话也是如此 - Session。Session如同系统的UISession一样，被设计成单例。如果你使用AF.request来请求，便是使用了其单例。在一次会话中，可能会涉及到多次请求任务的场景。这些请求里可能某些请求会失败，需要对这些请求进行重试或者丢弃等操作；要完成这样的操作，必定会涉及到如何存储这些请求，如何区分这些请求成功与否，如何移除这些请求？</p>
+
+<p>Session这个类中使用了Set<Request>这个集合来存储被激活的请求。</Request></p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="c1">/// Set of currently active `Request`s.</span>
+    <span class="k">var</span> <span class="nv">activeRequests</span><span class="p">:</span> <span class="kt">Set</span><span class="o">&lt;</span><span class="kt">Request</span><span class="o">&gt;</span> <span class="o">=</span> <span class="p">[]</span>
+</code></pre></div></div>
+<p>在执行这些操作的时候，为避免主线程阻塞，都是采用GCD将任务分发到异步队列里。在Session中，也是持有了内部<strong>rootQueue</strong>。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	<span class="c1">/// Root `DispatchQueue` for all internal callbacks and state update. **MUST** be a serial queue.</span>
+   <span class="kd">public</span> <span class="k">let</span> <span class="nv">rootQueue</span><span class="p">:</span> <span class="kt">DispatchQueue</span>
+
+</code></pre></div></div>
+
+<p>响应了之后如何操作？如：</p>
+
+<p>1.DataTask请求任务开启后，得到了响应，回调事情的触发
+2.下载任务开启之后，下载进度随下载的数据更新等</p>
+
+<p>在Alamofire中，采用了协议与通知机制来进行不同场景下事件的监听与调用。定义了<strong>EventMonitor</strong>协议与<strong>AlamofireNotifications</strong>。这些事件的监听又与每个会话息息相关，因此Session内部持有EventMonitor。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">/// `CompositeEventMonitor` used to compose Alamofire's `defaultEventMonitors` and any passed `EventMonitor`s.</span>
+    <span class="kd">public</span> <span class="k">let</span> <span class="nv">eventMonitor</span><span class="p">:</span> <span class="kt">CompositeEventMonitor</span>
+    <span class="c1">/// `EventMonitor`s included in all instances. `[AlamofireNotifications()]` by default.</span>
+    <span class="kd">public</span> <span class="k">let</span> <span class="nv">defaultEventMonitors</span><span class="p">:</span> <span class="p">[</span><span class="kt">EventMonitor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="kt">AlamofireNotifications</span><span class="p">()]</span>
+
+</code></pre></div></div>
+
+<p>至此，创建一个Session实例需要：</p>
+
+<p>1.URLSession实例
+2.SessionDelegate实例
+3.rootQueue
+4.eventMonitor</p>
+
+<p>创建了Session实例之后，随即执行request方法。层层调用之后会执行<code class="highlighter-rouge">perform(request)</code>，这个方法会异步地将request加入到activeRequests中，并且执行设置操作<code class="highlighter-rouge">performSetupOperations</code>。这个设置操作做了哪些事情？</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="kd">func</span> <span class="nf">performSetupOperations</span><span class="p">(</span><span class="k">for</span> <span class="nv">request</span><span class="p">:</span> <span class="kt">Request</span><span class="p">,</span> <span class="nv">convertible</span><span class="p">:</span> <span class="kt">URLRequestConvertible</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">let</span> <span class="nv">initialRequest</span><span class="p">:</span> <span class="kt">URLRequest</span>
+		<span class="c1">// 验证request是否是合法的URLRequest	</span>
+        <span class="k">do</span> <span class="p">{</span>
+            <span class="n">initialRequest</span> <span class="o">=</span> <span class="k">try</span> <span class="n">convertible</span><span class="o">.</span><span class="nf">asURLRequest</span><span class="p">()</span>
+            <span class="k">try</span> <span class="n">initialRequest</span><span class="o">.</span><span class="nf">validate</span><span class="p">()</span>
+        <span class="p">}</span> <span class="k">catch</span> <span class="p">{</span>
+            <span class="n">rootQueue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span> <span class="n">request</span><span class="o">.</span><span class="nf">didFailToCreateURLRequest</span><span class="p">(</span><span class="nv">with</span><span class="p">:</span> <span class="n">error</span><span class="o">.</span><span class="nf">asAFError</span><span class="p">(</span><span class="nv">or</span><span class="p">:</span> <span class="o">.</span><span class="nf">createURLRequestFailed</span><span class="p">(</span><span class="nv">error</span><span class="p">:</span> <span class="n">error</span><span class="p">)))</span> <span class="p">}</span>
+            <span class="k">return</span>
+        <span class="p">}</span>
+		<span class="c1">// 完成创建初始的URLRequest</span>
+        <span class="n">rootQueue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span> <span class="n">request</span><span class="o">.</span><span class="nf">didCreateInitialURLRequest</span><span class="p">(</span><span class="n">initialRequest</span><span class="p">)</span> <span class="p">}</span>
+
+        <span class="k">guard</span> <span class="o">!</span><span class="n">request</span><span class="o">.</span><span class="n">isCancelled</span> <span class="k">else</span> <span class="p">{</span> <span class="k">return</span> <span class="p">}</span>
+
+        <span class="k">guard</span> <span class="k">let</span> <span class="nv">adapter</span> <span class="o">=</span> <span class="nf">adapter</span><span class="p">(</span><span class="nv">for</span><span class="p">:</span> <span class="n">request</span><span class="p">)</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">rootQueue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span> <span class="k">self</span><span class="o">.</span><span class="nf">didCreateURLRequest</span><span class="p">(</span><span class="n">initialRequest</span><span class="p">,</span> <span class="nv">for</span><span class="p">:</span> <span class="n">request</span><span class="p">)</span> <span class="p">}</span>
+            <span class="k">return</span>
+        <span class="p">}</span>
+		<span class="c1">// 请求适配设置</span>
+        <span class="n">adapter</span><span class="o">.</span><span class="nf">adapt</span><span class="p">(</span><span class="n">initialRequest</span><span class="p">,</span> <span class="nv">for</span><span class="p">:</span> <span class="k">self</span><span class="p">)</span> <span class="p">{</span> <span class="n">result</span> <span class="k">in</span>
+            <span class="k">do</span> <span class="p">{</span>
+                <span class="k">let</span> <span class="nv">adaptedRequest</span> <span class="o">=</span> <span class="k">try</span> <span class="n">result</span><span class="o">.</span><span class="nf">get</span><span class="p">()</span>
+                <span class="k">try</span> <span class="n">adaptedRequest</span><span class="o">.</span><span class="nf">validate</span><span class="p">()</span>
+
+                <span class="k">self</span><span class="o">.</span><span class="n">rootQueue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span>
+                		<span class="c1">// 完成了适配初始的URLRequest</span>
+                    <span class="n">request</span><span class="o">.</span><span class="nf">didAdaptInitialRequest</span><span class="p">(</span><span class="n">initialRequest</span><span class="p">,</span> <span class="nv">to</span><span class="p">:</span> <span class="n">adaptedRequest</span><span class="p">)</span>
+                    <span class="c1">// 完成了创建URLRequest</span>
+                    <span class="k">self</span><span class="o">.</span><span class="nf">didCreateURLRequest</span><span class="p">(</span><span class="n">adaptedRequest</span><span class="p">,</span> <span class="nv">for</span><span class="p">:</span> <span class="n">request</span><span class="p">)</span>
+                <span class="p">}</span>
+            <span class="p">}</span> <span class="k">catch</span> <span class="p">{</span>
+                <span class="k">self</span><span class="o">.</span><span class="n">rootQueue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span> <span class="n">request</span><span class="o">.</span><span class="nf">didFailToAdaptURLRequest</span><span class="p">(</span><span class="n">initialRequest</span><span class="p">,</span> <span class="nv">withError</span><span class="p">:</span> <span class="o">.</span><span class="nf">requestAdaptationFailed</span><span class="p">(</span><span class="nv">error</span><span class="p">:</span> <span class="n">error</span><span class="p">))</span> <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+</code></pre></div></div>
+<p>这个设置过程中，比较重要的是<strong>request.didCreateInitialURLRequest</strong>与<strong>didCreateURLRequest</strong>。一个是完成创建初始的URLRequest实例，另一个是完成创建URLRequest实例。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Request - didCreateInitialURLRequest</span>
+	<span class="kd">func</span> <span class="nf">didCreateInitialURLRequest</span><span class="p">(</span><span class="n">_</span> <span class="nv">request</span><span class="p">:</span> <span class="kt">URLRequest</span><span class="p">)</span> <span class="p">{</span>
+		<span class="c1">// 确保任务是在underlyingQueue中</span>
+        <span class="nf">dispatchPrecondition</span><span class="p">(</span><span class="nv">condition</span><span class="p">:</span> <span class="o">.</span><span class="nf">onQueue</span><span class="p">(</span><span class="n">underlyingQueue</span><span class="p">))</span>
+		<span class="c1">// 将request添加到MutableState的requests数组中</span>
+        <span class="n">protectedMutableState</span><span class="o">.</span><span class="n">write</span> <span class="p">{</span> <span class="nv">$0</span><span class="o">.</span><span class="n">requests</span><span class="o">.</span><span class="nf">append</span><span class="p">(</span><span class="n">request</span><span class="p">)</span> <span class="p">}</span>
+		<span class="c1">// 事件监听者的初始化URLRequest方法</span>
+        <span class="n">eventMonitor</span><span class="p">?</span><span class="o">.</span><span class="nf">request</span><span class="p">(</span><span class="k">self</span><span class="p">,</span> <span class="nv">didCreateInitialURLRequest</span><span class="p">:</span> <span class="n">request</span><span class="p">)</span>
+    <span class="p">}</span>
+</code></pre></div></div>
+
+<p><strong>MutableState</strong>是一个存储各种状态（如：请求状态，任务，请求，重试次数，下载/重定向处理等）的结构体，这个结构体内的元素都会随着请求状态的改变而改变。请求任务是在Session中的<strong>updateStatesForTask</strong>里开启的，updateStatesForTask方法是在didCreateURLRequest中被调用，如果请求实例是resumed状态，就获取这个请求实例的请求任务，调用resume()开启请求。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	<span class="c1">// Session - didCreateURLRequest</span>
+    <span class="kd">func</span> <span class="nf">didCreateURLRequest</span><span class="p">(</span><span class="n">_</span> <span class="nv">urlRequest</span><span class="p">:</span> <span class="kt">URLRequest</span><span class="p">,</span> <span class="k">for</span> <span class="nv">request</span><span class="p">:</span> <span class="kt">Request</span><span class="p">)</span> <span class="p">{</span>
+    
+        <span class="n">request</span><span class="o">.</span><span class="nf">didCreateURLRequest</span><span class="p">(</span><span class="n">urlRequest</span><span class="p">)</span>
+		<span class="c1">// 判断请求是否已被取消</span>
+        <span class="k">guard</span> <span class="o">!</span><span class="n">request</span><span class="o">.</span><span class="n">isCancelled</span> <span class="k">else</span> <span class="p">{</span> <span class="k">return</span> <span class="p">}</span>
+		<span class="c1">// 从request中，获取任务</span>
+        <span class="k">let</span> <span class="nv">task</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="nf">task</span><span class="p">(</span><span class="nv">for</span><span class="p">:</span> <span class="n">urlRequest</span><span class="p">,</span> <span class="nv">using</span><span class="p">:</span> <span class="n">session</span><span class="p">)</span>
+        <span class="c1">// 将任务存储在Session的requestTaskMap中</span>
+        <span class="n">requestTaskMap</span><span class="p">[</span><span class="n">request</span><span class="p">]</span> <span class="o">=</span> <span class="n">task</span>
+        <span class="n">request</span><span class="o">.</span><span class="nf">didCreateTask</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
+		<span class="c1">// 改变任务的状态，开启请求（resumed -&gt; resume()）</span>
+        <span class="nf">updateStatesForTask</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="nv">request</span><span class="p">:</span> <span class="n">request</span><span class="p">)</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// Session - updateStatesForTask</span>
+    <span class="kd">func</span> <span class="nf">updateStatesForTask</span><span class="p">(</span><span class="n">_</span> <span class="nv">task</span><span class="p">:</span> <span class="kt">URLSessionTask</span><span class="p">,</span> <span class="nv">request</span><span class="p">:</span> <span class="kt">Request</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">request</span><span class="o">.</span><span class="n">withState</span> <span class="p">{</span> <span class="n">state</span> <span class="k">in</span>
+            <span class="k">switch</span> <span class="n">state</span> <span class="p">{</span>
+            <span class="k">case</span> <span class="o">.</span><span class="n">initialized</span><span class="p">,</span> <span class="o">.</span><span class="nv">finished</span><span class="p">:</span>
+                <span class="c1">// Do nothing.</span>
+                <span class="k">break</span>
+            <span class="k">case</span> <span class="o">.</span><span class="nv">resumed</span><span class="p">:</span>
+                <span class="n">task</span><span class="o">.</span><span class="nf">resume</span><span class="p">()</span>
+                <span class="n">rootQueue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span> <span class="n">request</span><span class="o">.</span><span class="nf">didResumeTask</span><span class="p">(</span><span class="n">task</span><span class="p">)</span> <span class="p">}</span>
+            <span class="k">case</span> <span class="o">.</span><span class="nv">suspended</span><span class="p">:</span>
+                <span class="n">task</span><span class="o">.</span><span class="nf">suspend</span><span class="p">()</span>
+                <span class="n">rootQueue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span> <span class="n">request</span><span class="o">.</span><span class="nf">didSuspendTask</span><span class="p">(</span><span class="n">task</span><span class="p">)</span> <span class="p">}</span>
+            <span class="k">case</span> <span class="o">.</span><span class="nv">cancelled</span><span class="p">:</span>
+                <span class="c1">// Resume to ensure metrics are gathered.</span>
+                <span class="n">task</span><span class="o">.</span><span class="nf">resume</span><span class="p">()</span>
+                <span class="n">task</span><span class="o">.</span><span class="nf">cancel</span><span class="p">()</span>
+                <span class="n">rootQueue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span> <span class="n">request</span><span class="o">.</span><span class="nf">didCancelTask</span><span class="p">(</span><span class="n">task</span><span class="p">)</span> <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+</code></pre></div></div>
+<p>至此，一个网络请求在Alamofire中，经历了会话 - 会话任务 - 事件监听 - 请求 / 任务存储等过程，发送出去了。</p>
+
+<h2 id="请求任务的响应">请求任务的响应</h2>
+<p>请求在发出去之后，什么时候会有响应 / 失败，时间是不确定的。因此在一个请求响应了之后，系统API提供给开发者调用的回调操作有两种。</p>
+
+<p>1.通过代理（URLSessionDelegate）回调。</p>
+
+<p>2.通过对应任务的completionHandler回调。如果未设置completionHandler，则会通过代理的方法回调。具体参见：<a href="https://developer.apple.com/documentation/foundation/urlsession">URLSession</a></p>
+
+<h3 id="会话代理">会话代理</h3>
+<p>这个类（SessionDelegate）如其名，是会话的代理对象。用于处理请求发出后，响应会话的代理方法。主要涉及<strong>URLSessionDataDelegate</strong>，<strong>URLSessionDownloadDelegate</strong>，<strong>URLSessionTaskDelegate</strong>。</p>
+
+<p>一个数据请求（DataRequest），响应的过程会分为两个步骤；在获得服务器响应之后，
+<strong>一</strong>：会先调用URLSessionDataDelegate.didReceive代理方法。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	<span class="kd">open</span> <span class="kd">func</span> <span class="nf">urlSession</span><span class="p">(</span><span class="n">_</span> <span class="nv">session</span><span class="p">:</span> <span class="kt">URLSession</span><span class="p">,</span> <span class="nv">dataTask</span><span class="p">:</span> <span class="kt">URLSessionDataTask</span><span class="p">,</span> <span class="n">didReceive</span> <span class="nv">data</span><span class="p">:</span> <span class="kt">Data</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">eventMonitor</span><span class="p">?</span><span class="o">.</span><span class="nf">urlSession</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="nv">dataTask</span><span class="p">:</span> <span class="n">dataTask</span><span class="p">,</span> <span class="nv">didReceive</span><span class="p">:</span> <span class="n">data</span><span class="p">)</span>
+		<span class="c1">// 确保能获取到本次请求的request</span>
+        <span class="k">guard</span> <span class="k">let</span> <span class="nv">request</span> <span class="o">=</span> <span class="nf">request</span><span class="p">(</span><span class="nv">for</span><span class="p">:</span> <span class="n">dataTask</span><span class="p">,</span> <span class="nv">as</span><span class="p">:</span> <span class="kt">DataRequest</span><span class="o">.</span><span class="k">self</span><span class="p">)</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="nf">assertionFailure</span><span class="p">(</span><span class="s">"dataTask did not find DataRequest."</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="p">}</span>
+		<span class="c1">// 接受数据</span>
+        <span class="n">request</span><span class="o">.</span><span class="nf">didReceive</span><span class="p">(</span><span class="nv">data</span><span class="p">:</span> <span class="n">data</span><span class="p">)</span>
+    <span class="p">}</span>
+
+</code></pre></div></div>
+<p>didReceive的逻辑是将元数据拼接 / 添加在protectedData中，并计算与更新数据下载的进度。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">// Request - didReceive</span>
+    <span class="kd">func</span> <span class="nf">didReceive</span><span class="p">(</span><span class="nv">data</span><span class="p">:</span> <span class="kt">Data</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="k">self</span><span class="o">.</span><span class="n">data</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+            <span class="n">protectedData</span><span class="o">.</span><span class="n">directValue</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">protectedData</span><span class="o">.</span><span class="nf">append</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="p">}</span>
+
+        <span class="nf">updateDownloadProgress</span><span class="p">()</span>
+    <span class="p">}</span>
+
+</code></pre></div></div>
+
+<p><strong>二</strong>：响应完成了之后，会调用<strong>URLSessionTaskDelegate</strong>的didCompleteWithError代理方法。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="kd">open</span> <span class="kd">func</span> <span class="nf">urlSession</span><span class="p">(</span><span class="n">_</span> <span class="nv">session</span><span class="p">:</span> <span class="kt">URLSession</span><span class="p">,</span> <span class="nv">task</span><span class="p">:</span> <span class="kt">URLSessionTask</span><span class="p">,</span> <span class="n">didCompleteWithError</span> <span class="nv">error</span><span class="p">:</span> <span class="kt">Error</span><span class="p">?)</span> <span class="p">{</span>
+        <span class="n">eventMonitor</span><span class="p">?</span><span class="o">.</span><span class="nf">urlSession</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="nv">task</span><span class="p">:</span> <span class="n">task</span><span class="p">,</span> <span class="nv">didCompleteWithError</span><span class="p">:</span> <span class="n">error</span><span class="p">)</span>
+		<span class="c1">// 从状态提供者里获取本次的请求</span>
+        <span class="k">let</span> <span class="nv">request</span> <span class="o">=</span> <span class="n">stateProvider</span><span class="p">?</span><span class="o">.</span><span class="nf">request</span><span class="p">(</span><span class="nv">for</span><span class="p">:</span> <span class="n">task</span><span class="p">)</span>
+		<span class="c1">// 调用完成请求任务</span>
+        <span class="n">stateProvider</span><span class="p">?</span><span class="o">.</span><span class="nf">didCompleteTask</span><span class="p">(</span><span class="n">task</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">request</span><span class="p">?</span><span class="o">.</span><span class="nf">didCompleteTask</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="nv">with</span><span class="p">:</span> <span class="n">error</span><span class="o">.</span><span class="n">map</span> <span class="p">{</span> <span class="nv">$0</span><span class="o">.</span><span class="nf">asAFError</span><span class="p">(</span><span class="nv">or</span><span class="p">:</span> <span class="o">.</span><span class="nf">sessionTaskFailed</span><span class="p">(</span><span class="nv">error</span><span class="p">:</span> <span class="nv">$0</span><span class="p">))</span> <span class="p">})</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+</code></pre></div></div>
+
+<p>在didCompleteWithError代理方法里会获取<strong>状态提供者</strong>，并调用它的didCompleteTask。状态提供者实际是遵循<strong>SessionStateProvider</strong>的Session实例。所以，这里也就是调用了Session.didCompleteTask。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	<span class="c1">// Session - didCompleteTask</span>
+    <span class="kd">func</span> <span class="nf">didCompleteTask</span><span class="p">(</span><span class="n">_</span> <span class="nv">task</span><span class="p">:</span> <span class="kt">URLSessionTask</span><span class="p">,</span> <span class="nv">completion</span><span class="p">:</span> <span class="kd">@escaping</span> <span class="p">()</span> <span class="o">-&gt;</span> <span class="kt">Void</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nf">dispatchPrecondition</span><span class="p">(</span><span class="nv">condition</span><span class="p">:</span> <span class="o">.</span><span class="nf">onQueue</span><span class="p">(</span><span class="n">rootQueue</span><span class="p">))</span>
+		<span class="c1">// 请求任务完成了，需要清理requestTaskMap中存储的request与task。</span>
+        <span class="k">let</span> <span class="nv">didDisassociate</span> <span class="o">=</span> <span class="n">requestTaskMap</span><span class="o">.</span><span class="nf">disassociateIfNecessaryAfterCompletingTask</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
+		
+        <span class="k">if</span> <span class="n">didDisassociate</span> <span class="p">{</span>
+            <span class="nf">completion</span><span class="p">()</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">waitingCompletions</span><span class="p">[</span><span class="n">task</span><span class="p">]</span> <span class="o">=</span> <span class="n">completion</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+</code></pre></div></div>
+
+<p><strong>RequestTaskMap</strong>中的操作完成后，会调用请求的<strong>didCompleteTask</strong>，继而调用<strong>retryOrFinish</strong>。<strong>retryOrFinish</strong>会将根据错误和代理方法来决定本次请求是需要重试还是结束。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	<span class="c1">//Request - didCompleteTask</span>
+    <span class="kd">func</span> <span class="nf">didCompleteTask</span><span class="p">(</span><span class="n">_</span> <span class="nv">task</span><span class="p">:</span> <span class="kt">URLSessionTask</span><span class="p">,</span> <span class="n">with</span> <span class="nv">error</span><span class="p">:</span> <span class="kt">AFError</span><span class="p">?)</span> <span class="p">{</span>
+        <span class="nf">dispatchPrecondition</span><span class="p">(</span><span class="nv">condition</span><span class="p">:</span> <span class="o">.</span><span class="nf">onQueue</span><span class="p">(</span><span class="n">underlyingQueue</span><span class="p">))</span>
+
+        <span class="k">self</span><span class="o">.</span><span class="n">error</span> <span class="o">=</span> <span class="k">self</span><span class="o">.</span><span class="n">error</span> <span class="p">??</span> <span class="n">error</span>
+
+        <span class="n">protectedValidators</span><span class="o">.</span><span class="n">directValue</span><span class="o">.</span><span class="n">forEach</span> <span class="p">{</span> <span class="nv">$0</span><span class="p">()</span> <span class="p">}</span>
+
+        <span class="n">eventMonitor</span><span class="p">?</span><span class="o">.</span><span class="nf">request</span><span class="p">(</span><span class="k">self</span><span class="p">,</span> <span class="nv">didCompleteTask</span><span class="p">:</span> <span class="n">task</span><span class="p">,</span> <span class="nv">with</span><span class="p">:</span> <span class="n">error</span><span class="p">)</span>
+		<span class="c1">// 决定完成本次请求，还是重试本次请求</span>
+        <span class="nf">retryOrFinish</span><span class="p">(</span><span class="nv">error</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">error</span><span class="p">)</span>
+    <span class="p">}</span>
+
+</code></pre></div></div>
+
+<p>如何决定结束本次请求或者重试本次请求？结束满足的条件：<strong>整个请求过程中，没有出现错误</strong> 或  <strong>没有retrier</strong>。</p>
+
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	<span class="c1">// Request - retryOrFinish</span>
+    <span class="kd">func</span> <span class="nf">retryOrFinish</span><span class="p">(</span><span class="nv">error</span><span class="p">:</span> <span class="kt">AFError</span><span class="p">?)</span> <span class="p">{</span>
+        <span class="nf">dispatchPrecondition</span><span class="p">(</span><span class="nv">condition</span><span class="p">:</span> <span class="o">.</span><span class="nf">onQueue</span><span class="p">(</span><span class="n">underlyingQueue</span><span class="p">))</span>
+		<span class="c1">// 没有错误，结束本次请求</span>
+        <span class="k">guard</span> <span class="k">let</span> <span class="nv">error</span> <span class="o">=</span> <span class="n">error</span><span class="p">,</span> <span class="k">let</span> <span class="nv">delegate</span> <span class="o">=</span> <span class="n">delegate</span> <span class="k">else</span> <span class="p">{</span> <span class="nf">finish</span><span class="p">();</span> <span class="k">return</span> <span class="p">}</span>
+		<span class="c1">// 处理结果，决定是否重试</span>
+        <span class="n">delegate</span><span class="o">.</span><span class="nf">retryResult</span><span class="p">(</span><span class="nv">for</span><span class="p">:</span> <span class="k">self</span><span class="p">,</span> <span class="nv">dueTo</span><span class="p">:</span> <span class="n">error</span><span class="p">)</span> <span class="p">{</span> <span class="n">retryResult</span> <span class="k">in</span>
+            <span class="k">switch</span> <span class="n">retryResult</span> <span class="p">{</span>
+            <span class="k">case</span> <span class="o">.</span><span class="nv">doNotRetry</span><span class="p">:</span>
+                <span class="k">self</span><span class="o">.</span><span class="nf">finish</span><span class="p">()</span>
+            <span class="k">case</span> <span class="kd">let</span> <span class="o">.</span><span class="nf">doNotRetryWithError</span><span class="p">(</span><span class="n">retryError</span><span class="p">):</span>
+                <span class="k">self</span><span class="o">.</span><span class="nf">finish</span><span class="p">(</span><span class="nv">error</span><span class="p">:</span> <span class="n">retryError</span><span class="o">.</span><span class="nf">asAFError</span><span class="p">(</span><span class="nv">orFailWith</span><span class="p">:</span> <span class="s">"Received retryError was not already AFError"</span><span class="p">))</span>
+            <span class="k">case</span> <span class="o">.</span><span class="n">retry</span><span class="p">,</span> <span class="o">.</span><span class="nv">retryWithDelay</span><span class="p">:</span>
+                <span class="n">delegate</span><span class="o">.</span><span class="nf">retryRequest</span><span class="p">(</span><span class="k">self</span><span class="p">,</span> <span class="nv">withDelay</span><span class="p">:</span> <span class="n">retryResult</span><span class="o">.</span><span class="n">delay</span><span class="p">)</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+</code></pre></div></div>
+
+<p>结束本次请求，处理请求的结果（包括：处理响应序列，执行回调，移除activeRequests中的Request）。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">/// 处理响应序列，并且回调.</span>
+    <span class="kd">func</span> <span class="nf">processNextResponseSerializer</span><span class="p">()</span> <span class="p">{</span>
+    	<span class="c1">// 能够获取到回调处理序列，就直接在回调队列里异步执行处理序列；如果没有获取到回调处理序列，表示本次请求已经完成，调用序列处理完成的闭包</span>
+        <span class="k">guard</span> <span class="k">let</span> <span class="nv">responseSerializer</span> <span class="o">=</span> <span class="nf">nextResponseSerializer</span><span class="p">()</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="c1">// 暂存回调</span>
+            <span class="k">var</span> <span class="nv">completions</span><span class="p">:</span> <span class="p">[()</span> <span class="o">-&gt;</span> <span class="kt">Void</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="n">protectedMutableState</span><span class="o">.</span><span class="n">write</span> <span class="p">{</span> <span class="n">mutableState</span> <span class="k">in</span>
+                <span class="n">completions</span> <span class="o">=</span> <span class="n">mutableState</span><span class="o">.</span><span class="n">responseSerializerCompletions</span>
+
+               <span class="c1">// 移除可变状态管理者里的响应回调</span>
+                <span class="n">mutableState</span><span class="o">.</span><span class="n">responseSerializers</span><span class="o">.</span><span class="nf">removeAll</span><span class="p">()</span>
+                <span class="n">mutableState</span><span class="o">.</span><span class="n">responseSerializerCompletions</span><span class="o">.</span><span class="nf">removeAll</span><span class="p">()</span>
+
+                <span class="k">if</span> <span class="n">mutableState</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="nf">canTransitionTo</span><span class="p">(</span><span class="o">.</span><span class="n">finished</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="n">mutableState</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="o">.</span><span class="n">finished</span>
+                <span class="p">}</span>
+
+                <span class="n">mutableState</span><span class="o">.</span><span class="n">responseSerializerProcessingFinished</span> <span class="o">=</span> <span class="kc">true</span>
+                <span class="n">mutableState</span><span class="o">.</span><span class="n">isFinishing</span> <span class="o">=</span> <span class="kc">false</span>
+            <span class="p">}</span>
+
+            <span class="n">completions</span><span class="o">.</span><span class="n">forEach</span> <span class="p">{</span> <span class="nv">$0</span><span class="p">()</span> <span class="p">}</span>
+
+            <span class="c1">// 从activeRequests中移除目前完成的请求</span>
+            <span class="nf">cleanup</span><span class="p">()</span>
+
+            <span class="k">return</span>
+        <span class="p">}</span>
+
+        <span class="n">serializationQueue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span> <span class="nf">responseSerializer</span><span class="p">()</span> <span class="p">}</span>
+    <span class="p">}</span>
+
+</code></pre></div></div>
+<p>至此，一个请求在经历创建会话，发送请求，服务器响应，处理响应结果，执行回调等阶段后，退出了会话。</p>
+
+<h2 id="响应的元数据处理">响应的元数据处理</h2>
+<p>元数据处理是一个将服务器返回的元数据处理为DataResponse类型的过程。在Alamofire中，无论当前请求是成功与否，执行fisnish方法的时候，都会去执行
+processNextResponseSerializer，在这个方法中会通过当前请求实例的nextResponseSerializer方法从请求实例的状态管理器里获取responseSerializer闭包，进行异步调用处理，元数据的处理也包含在其中。</p>
+
+<p><img src="https://hy-blog-pic.oss-cn-shanghai.aliyuncs.com/uPic/AF_响应处理序列.png" alt="" /></p>
+
+<p>请求实例的responseSerializer闭包是如何被添加进状态管理器的responseSerializers数组中的？</p>
+
+<h3 id="添加响应处理闭包">添加响应处理闭包</h3>
+<p>无论当前请求是一个DataRequest还是一个DownloadRequest，处理响应元数据的闭包都是通过它们各自的拓展的responseString()来传入的。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// DataRequest - responseString</span>
+<span class="kd">extension</span> <span class="kt">DataRequest</span> <span class="p">{</span>
+ 	
+    <span class="kd">@discardableResult</span>
+    <span class="kd">public</span> <span class="kd">func</span> <span class="nf">responseString</span><span class="p">(</span><span class="nv">queue</span><span class="p">:</span> <span class="kt">DispatchQueue</span> <span class="o">=</span> <span class="o">.</span><span class="n">main</span><span class="p">,</span>
+                               <span class="nv">encoding</span><span class="p">:</span> <span class="kt">String</span><span class="o">.</span><span class="kt">Encoding</span><span class="p">?</span> <span class="o">=</span> <span class="kc">nil</span><span class="p">,</span>
+                               <span class="nv">completionHandler</span><span class="p">:</span> <span class="kd">@escaping</span> <span class="p">(</span><span class="kt">AFDataResponse</span><span class="o">&lt;</span><span class="kt">String</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">Void</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="k">Self</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="nf">response</span><span class="p">(</span><span class="nv">queue</span><span class="p">:</span> <span class="n">queue</span><span class="p">,</span>
+                        <span class="nv">responseSerializer</span><span class="p">:</span> <span class="kt">StringResponseSerializer</span><span class="p">(</span><span class="nv">encoding</span><span class="p">:</span> <span class="n">encoding</span><span class="p">),</span>
+                        <span class="nv">completionHandler</span><span class="p">:</span> <span class="n">completionHandler</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// DownloadRequest - responseString</span>
+<span class="kd">extension</span> <span class="kt">DownloadRequest</span> <span class="p">{</span>
+    <span class="kd">@discardableResult</span>
+    <span class="kd">public</span> <span class="kd">func</span> <span class="nf">responseString</span><span class="p">(</span><span class="nv">queue</span><span class="p">:</span> <span class="kt">DispatchQueue</span> <span class="o">=</span> <span class="o">.</span><span class="n">main</span><span class="p">,</span>
+                               <span class="nv">encoding</span><span class="p">:</span> <span class="kt">String</span><span class="o">.</span><span class="kt">Encoding</span><span class="p">?</span> <span class="o">=</span> <span class="kc">nil</span><span class="p">,</span>
+                               <span class="nv">completionHandler</span><span class="p">:</span> <span class="kd">@escaping</span> <span class="p">(</span><span class="kt">AFDownloadResponse</span><span class="o">&lt;</span><span class="kt">String</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">Void</span><span class="p">)</span>
+        <span class="o">-&gt;</span> <span class="k">Self</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="nf">response</span><span class="p">(</span><span class="nv">queue</span><span class="p">:</span> <span class="n">queue</span><span class="p">,</span>
+                        <span class="nv">responseSerializer</span><span class="p">:</span> <span class="kt">StringResponseSerializer</span><span class="p">(</span><span class="nv">encoding</span><span class="p">:</span> <span class="n">encoding</span><span class="p">),</span>
+                        <span class="nv">completionHandler</span><span class="p">:</span> <span class="n">completionHandler</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+</code></pre></div></div>
+
+<p>以DataRequest为例，被传入的completionHandler，是在response方法中被添加进请求的responseSerializer数组中。response方法内部调用<strong>appendResponseSerializer</strong>添加闭包。这个方法除了添加闭包外，还执行了请求实例的processNextResponseSerializer方法。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	<span class="c1">//Request - appendResponseSerializer，参数是闭包</span>
+    <span class="kd">func</span> <span class="nf">appendResponseSerializer</span><span class="p">(</span><span class="n">_</span> <span class="nv">closure</span><span class="p">:</span> <span class="kd">@escaping</span> <span class="p">()</span> <span class="o">-&gt;</span> <span class="kt">Void</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">protectedMutableState</span><span class="o">.</span><span class="n">write</span> <span class="p">{</span> <span class="n">mutableState</span> <span class="k">in</span>
+        	<span class="c1">// 将闭包添加进状态管理器的responseSerializers数组</span>
+            <span class="n">mutableState</span><span class="o">.</span><span class="n">responseSerializers</span><span class="o">.</span><span class="nf">append</span><span class="p">(</span><span class="n">closure</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">mutableState</span><span class="o">.</span><span class="n">state</span> <span class="o">==</span> <span class="o">.</span><span class="n">finished</span> <span class="p">{</span>
+                <span class="n">mutableState</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="o">.</span><span class="n">resumed</span>
+            <span class="p">}</span>
+			<span class="c1">// 当状态管理器中响应序列处理完成，又调用调用下一个响应序列处理</span>
+            <span class="k">if</span> <span class="n">mutableState</span><span class="o">.</span><span class="n">responseSerializerProcessingFinished</span> <span class="p">{</span>
+                <span class="n">underlyingQueue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span> <span class="k">self</span><span class="o">.</span><span class="nf">processNextResponseSerializer</span><span class="p">()</span> <span class="p">}</span>
+            <span class="p">}</span>
+
+            <span class="k">if</span> <span class="n">mutableState</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="nf">canTransitionTo</span><span class="p">(</span><span class="o">.</span><span class="n">resumed</span><span class="p">)</span> <span class="p">{</span>
+                <span class="n">underlyingQueue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span> <span class="k">if</span> <span class="k">self</span><span class="o">.</span><span class="n">delegate</span><span class="p">?</span><span class="o">.</span><span class="n">startImmediately</span> <span class="o">==</span> <span class="kc">true</span> <span class="p">{</span> <span class="k">self</span><span class="o">.</span><span class="nf">resume</span><span class="p">()</span> <span class="p">}</span> <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+</code></pre></div></div>
+
+<h3 id="响应处理闭包的职责">响应处理闭包的职责</h3>
+<p>上面已经讲述响应处理闭包的添加过程。这个被传入的闭包，在调用的时候，具体会做哪些事情？</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kd">func</span> <span class="n">response</span><span class="o">&lt;</span><span class="kt">Serializer</span><span class="p">:</span> <span class="kt">DataResponseSerializerProtocol</span><span class="o">&gt;</span><span class="p">(</span><span class="nv">queue</span><span class="p">:</span> <span class="kt">DispatchQueue</span> <span class="o">=</span> <span class="o">.</span><span class="n">main</span><span class="p">,</span>
+                                                                     <span class="nv">responseSerializer</span><span class="p">:</span> <span class="kt">Serializer</span><span class="p">,</span>
+                                                                     <span class="nv">completionHandler</span><span class="p">:</span> <span class="kd">@escaping</span> <span class="p">(</span><span class="kt">AFDataResponse</span><span class="o">&lt;</span><span class="kt">Serializer</span><span class="o">.</span><span class="kt">SerializedObject</span><span class="o">&gt;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">Void</span><span class="p">)</span>
+        <span class="o">-&gt;</span> <span class="k">Self</span> <span class="p">{</span>
+        <span class="n">appendResponseSerializer</span> <span class="p">{</span>
+            <span class="c1">// 获取开始的绝对时间</span>
+            <span class="k">let</span> <span class="nv">start</span> <span class="o">=</span> <span class="kt">CFAbsoluteTimeGetCurrent</span><span class="p">()</span>
+            <span class="k">let</span> <span class="nv">result</span><span class="p">:</span> <span class="kt">AFResult</span><span class="o">&lt;</span><span class="kt">Serializer</span><span class="o">.</span><span class="kt">SerializedObject</span><span class="o">&gt;</span> <span class="o">=</span> <span class="kt">Result</span> <span class="p">{</span>
+            		<span class="c1">// 将返回的Data类型的元数据转为String类型, 再封装成为Result类型</span>
+                <span class="k">try</span> <span class="n">responseSerializer</span><span class="o">.</span><span class="nf">serialize</span><span class="p">(</span><span class="nv">request</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">request</span><span class="p">,</span>
+                                                 <span class="nv">response</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">response</span><span class="p">,</span>
+                                                 <span class="nv">data</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+                                                 <span class="nv">error</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">error</span><span class="p">)</span>
+            <span class="p">}</span><span class="o">.</span><span class="n">mapError</span> <span class="p">{</span> <span class="n">error</span> <span class="k">in</span>
+                <span class="n">error</span><span class="o">.</span><span class="nf">asAFError</span><span class="p">(</span><span class="nv">or</span><span class="p">:</span> <span class="o">.</span><span class="nf">responseSerializationFailed</span><span class="p">(</span><span class="nv">reason</span><span class="p">:</span> <span class="o">.</span><span class="nf">customSerializationFailed</span><span class="p">(</span><span class="nv">error</span><span class="p">:</span> <span class="n">error</span><span class="p">)))</span>
+            <span class="p">}</span>
+			  <span class="c1">// 获取结果处理后的结束时间</span>
+            <span class="k">let</span> <span class="nv">end</span> <span class="o">=</span> <span class="kt">CFAbsoluteTimeGetCurrent</span><span class="p">()</span>
+            
+            <span class="k">self</span><span class="o">.</span><span class="n">underlyingQueue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span>
+            		<span class="c1">// 生成DataRespo实例</span>
+                <span class="k">let</span> <span class="nv">response</span> <span class="o">=</span> <span class="kt">DataResponse</span><span class="p">(</span><span class="nv">request</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">request</span><span class="p">,</span>
+                                            <span class="nv">response</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">response</span><span class="p">,</span>
+                                            <span class="nv">data</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+                                            <span class="nv">metrics</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">metrics</span><span class="p">,</span>
+                                            <span class="nv">serializationDuration</span><span class="p">:</span> <span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span>
+                                            <span class="nv">result</span><span class="p">:</span> <span class="n">result</span><span class="p">)</span>
+
+                <span class="k">self</span><span class="o">.</span><span class="n">eventMonitor</span><span class="p">?</span><span class="o">.</span><span class="nf">request</span><span class="p">(</span><span class="k">self</span><span class="p">,</span> <span class="nv">didParseResponse</span><span class="p">:</span> <span class="n">response</span><span class="p">)</span>
+
+                <span class="k">guard</span> <span class="k">let</span> <span class="nv">serializerError</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">failure</span><span class="p">,</span> <span class="k">let</span> <span class="nv">delegate</span> <span class="o">=</span> <span class="k">self</span><span class="o">.</span><span class="n">delegate</span> <span class="k">else</span> <span class="p">{</span>
+                    <span class="k">self</span><span class="o">.</span><span class="n">responseSerializerDidComplete</span> <span class="p">{</span> <span class="n">queue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span> <span class="nf">completionHandler</span><span class="p">(</span><span class="n">response</span><span class="p">)</span> <span class="p">}</span> <span class="p">}</span>
+                    <span class="k">return</span>
+                <span class="p">}</span>
+				   <span class="c1">// 询问代理，调用retryResult。</span>
+                <span class="n">delegate</span><span class="o">.</span><span class="nf">retryResult</span><span class="p">(</span><span class="nv">for</span><span class="p">:</span> <span class="k">self</span><span class="p">,</span> <span class="nv">dueTo</span><span class="p">:</span> <span class="n">serializerError</span><span class="p">)</span> <span class="p">{</span> <span class="n">retryResult</span> <span class="k">in</span>
+                    <span class="k">var</span> <span class="nv">didComplete</span><span class="p">:</span> <span class="p">(()</span> <span class="o">-&gt;</span> <span class="kt">Void</span><span class="p">)?</span>
+
+                    <span class="k">defer</span> <span class="p">{</span>
+                        <span class="k">if</span> <span class="k">let</span> <span class="nv">didComplete</span> <span class="o">=</span> <span class="n">didComplete</span> <span class="p">{</span>
+                            <span class="k">self</span><span class="o">.</span><span class="n">responseSerializerDidComplete</span> <span class="p">{</span> <span class="n">queue</span><span class="o">.</span><span class="n">async</span> <span class="p">{</span> <span class="nf">didComplete</span><span class="p">()</span> <span class="p">}</span> <span class="p">}</span>
+                        <span class="p">}</span>
+                    <span class="p">}</span>
+
+                    <span class="k">switch</span> <span class="n">retryResult</span> <span class="p">{</span>
+                    <span class="k">case</span> <span class="o">.</span><span class="nv">doNotRetry</span><span class="p">:</span>
+                        <span class="n">didComplete</span> <span class="o">=</span> <span class="p">{</span> <span class="nf">completionHandler</span><span class="p">(</span><span class="n">response</span><span class="p">)</span> <span class="p">}</span>
+
+                    <span class="k">case</span> <span class="kd">let</span> <span class="o">.</span><span class="nf">doNotRetryWithError</span><span class="p">(</span><span class="n">retryError</span><span class="p">):</span>
+                        <span class="k">let</span> <span class="nv">result</span><span class="p">:</span> <span class="kt">AFResult</span><span class="o">&lt;</span><span class="kt">Serializer</span><span class="o">.</span><span class="kt">SerializedObject</span><span class="o">&gt;</span> <span class="o">=</span> <span class="o">.</span><span class="nf">failure</span><span class="p">(</span><span class="n">retryError</span><span class="o">.</span><span class="nf">asAFError</span><span class="p">(</span><span class="nv">orFailWith</span><span class="p">:</span> <span class="s">"Received retryError was not already AFError"</span><span class="p">))</span>
+
+                        <span class="k">let</span> <span class="nv">response</span> <span class="o">=</span> <span class="kt">DataResponse</span><span class="p">(</span><span class="nv">request</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">request</span><span class="p">,</span>
+                                                    <span class="nv">response</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">response</span><span class="p">,</span>
+                                                    <span class="nv">data</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+                                                    <span class="nv">metrics</span><span class="p">:</span> <span class="k">self</span><span class="o">.</span><span class="n">metrics</span><span class="p">,</span>
+                                                    <span class="nv">serializationDuration</span><span class="p">:</span> <span class="n">end</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span>
+                                                    <span class="nv">result</span><span class="p">:</span> <span class="n">result</span><span class="p">)</span>
+
+                        <span class="n">didComplete</span> <span class="o">=</span> <span class="p">{</span> <span class="nf">completionHandler</span><span class="p">(</span><span class="n">response</span><span class="p">)</span> <span class="p">}</span>
+
+                    <span class="k">case</span> <span class="o">.</span><span class="n">retry</span><span class="p">,</span> <span class="o">.</span><span class="nv">retryWithDelay</span><span class="p">:</span>
+                        <span class="n">delegate</span><span class="o">.</span><span class="nf">retryRequest</span><span class="p">(</span><span class="k">self</span><span class="p">,</span> <span class="nv">withDelay</span><span class="p">:</span> <span class="n">retryResult</span><span class="o">.</span><span class="n">delay</span><span class="p">)</span>
+                    <span class="p">}</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="k">self</span>
+    <span class="p">}</span>
+
+</code></pre></div></div>
+<p>由此可以看到，响应处理闭包会将服务器返回的Data类型的数据转为String类型，与<strong>请求实例</strong>，<strong>原响应数据</strong>，<strong>整个操作时间</strong>，及<strong>Result实例</strong>组装一个DataRespons的实例；最后询问代理执行retryResult，来判定结束本次请求还是需要重试本次请求。</p>
+
+<h2 id="线程安全">线程安全</h2>
+<p>Alamofire没有直接使用NSLock来保证线程安全。而是使用了<strong>os_unfair_lock_t</strong>（一种低级的锁，https://developer.apple.com/documentation/os/synchronization?language=objc ）。然后对锁的操作进行封装（详细查看<strong>UnfairLock</strong>这个类）。UnfairLock对外暴露两个around操作，一个有返回类型，一个无返回类型。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">final</span> <span class="kd">class</span> <span class="kt">UnfairLock</span> <span class="p">{</span>
+    <span class="kd">private</span> <span class="k">let</span> <span class="nv">unfairLock</span><span class="p">:</span> <span class="n">os_unfair_lock_t</span>
+
+    <span class="nf">init</span><span class="p">()</span> <span class="p">{</span>
+        <span class="n">unfairLock</span> <span class="o">=</span> <span class="o">.</span><span class="nf">allocate</span><span class="p">(</span><span class="nv">capacity</span><span class="p">:</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">unfairLock</span><span class="o">.</span><span class="nf">initialize</span><span class="p">(</span><span class="nv">to</span><span class="p">:</span> <span class="nf">os_unfair_lock</span><span class="p">())</span>
+    <span class="p">}</span>
+
+    <span class="kd">deinit</span> <span class="p">{</span>
+        <span class="n">unfairLock</span><span class="o">.</span><span class="nf">deinitialize</span><span class="p">(</span><span class="nv">count</span><span class="p">:</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">unfairLock</span><span class="o">.</span><span class="nf">deallocate</span><span class="p">()</span>
+    <span class="p">}</span>
+
+    <span class="kd">private</span> <span class="kd">func</span> <span class="nf">lock</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nf">os_unfair_lock_lock</span><span class="p">(</span><span class="n">unfairLock</span><span class="p">)</span>
+    <span class="p">}</span>
+
+    <span class="kd">private</span> <span class="kd">func</span> <span class="nf">unlock</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nf">os_unfair_lock_unlock</span><span class="p">(</span><span class="n">unfairLock</span><span class="p">)</span>
+    <span class="p">}</span>
+
+    <span class="c1">/// Executes a closure returning a value while acquiring the lock.</span>
+    <span class="c1">///</span>
+    <span class="c1">/// - Parameter closure: The closure to run.</span>
+    <span class="c1">///</span>
+    <span class="c1">/// - Returns:           The value the closure generated.</span>
+    <span class="kd">func</span> <span class="n">around</span><span class="o">&lt;</span><span class="kt">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">_</span> <span class="nv">closure</span><span class="p">:</span> <span class="p">()</span> <span class="o">-&gt;</span> <span class="kt">T</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">T</span> <span class="p">{</span>
+        <span class="nf">lock</span><span class="p">();</span> <span class="k">defer</span> <span class="p">{</span> <span class="nf">unlock</span><span class="p">()</span> <span class="p">}</span>
+        <span class="k">return</span> <span class="nf">closure</span><span class="p">()</span>
+    <span class="p">}</span>
+
+    <span class="c1">/// Execute a closure while acquiring the lock.</span>
+    <span class="c1">///</span>
+    <span class="c1">/// - Parameter closure: The closure to run.</span>
+    <span class="kd">func</span> <span class="nf">around</span><span class="p">(</span><span class="n">_</span> <span class="nv">closure</span><span class="p">:</span> <span class="p">()</span> <span class="o">-&gt;</span> <span class="kt">Void</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nf">lock</span><span class="p">();</span> <span class="k">defer</span> <span class="p">{</span> <span class="nf">unlock</span><span class="p">()</span> <span class="p">}</span>
+        <span class="k">return</span> <span class="nf">closure</span><span class="p">()</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+</code></pre></div></div>
+
+<p>同时，作者设计了Protector类；使用Protector来对外暴露read / write方法来进行线程安全的数据访问。</p>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">/// A thread-safe wrapper around a value.</span>
+<span class="kd">final</span> <span class="kd">class</span> <span class="kt">Protector</span><span class="o">&lt;</span><span class="kt">T</span><span class="o">&gt;</span> <span class="p">{</span>
+    <span class="kd">private</span> <span class="k">let</span> <span class="nv">lock</span> <span class="o">=</span> <span class="kt">UnfairLock</span><span class="p">()</span>
+    <span class="kd">private</span> <span class="k">var</span> <span class="nv">value</span><span class="p">:</span> <span class="kt">T</span>
+
+    <span class="nf">init</span><span class="p">(</span><span class="n">_</span> <span class="nv">value</span><span class="p">:</span> <span class="kt">T</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">value</span>
+    <span class="p">}</span>
+
+    <span class="c1">/// The contained value. Unsafe for anything more than direct read or write.</span>
+    <span class="k">var</span> <span class="nv">directValue</span><span class="p">:</span> <span class="kt">T</span> <span class="p">{</span>
+        <span class="k">get</span> <span class="p">{</span> <span class="k">return</span> <span class="n">lock</span><span class="o">.</span><span class="n">around</span> <span class="p">{</span> <span class="n">value</span> <span class="p">}</span> <span class="p">}</span>
+        <span class="k">set</span> <span class="p">{</span> <span class="n">lock</span><span class="o">.</span><span class="n">around</span> <span class="p">{</span> <span class="n">value</span> <span class="o">=</span> <span class="n">newValue</span> <span class="p">}</span> <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="c1">/// Synchronously read or transform the contained value.</span>
+    <span class="c1">///</span>
+    <span class="c1">/// - Parameter closure: The closure to execute.</span>
+    <span class="c1">///</span>
+    <span class="c1">/// - Returns:           The return value of the closure passed.</span>
+    <span class="kd">func</span> <span class="n">read</span><span class="o">&lt;</span><span class="kt">U</span><span class="o">&gt;</span><span class="p">(</span><span class="n">_</span> <span class="nv">closure</span><span class="p">:</span> <span class="p">(</span><span class="kt">T</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">U</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">U</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">lock</span><span class="o">.</span><span class="n">around</span> <span class="p">{</span> <span class="nf">closure</span><span class="p">(</span><span class="k">self</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="c1">/// Synchronously modify the protected value.</span>
+    <span class="c1">///</span>
+    <span class="c1">/// - Parameter closure: The closure to execute.</span>
+    <span class="c1">///</span>
+    <span class="c1">/// - Returns:           The modified value.</span>
+    <span class="kd">@discardableResult</span>
+    <span class="kd">func</span> <span class="n">write</span><span class="o">&lt;</span><span class="kt">U</span><span class="o">&gt;</span><span class="p">(</span><span class="n">_</span> <span class="nv">closure</span><span class="p">:</span> <span class="p">(</span><span class="k">inout</span> <span class="kt">T</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">U</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">U</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">lock</span><span class="o">.</span><span class="n">around</span> <span class="p">{</span> <span class="nf">closure</span><span class="p">(</span><span class="o">&amp;</span><span class="k">self</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+</code></pre></div></div>
+
+<h2 id="结束语">结束语</h2>
+<p>本文分析了Alamofire中，执行一个请求会经历的过程；并讲解了其中大部分细节的实现。总体来说，Alamofire的逻辑很值得读一读。</p>
+
+<h2 id="链接">链接</h2>
+<ol>
+  <li>自旋锁与互斥锁 https://www.zhihu.com/question/66733477</li>
+  <li>Swift下标语法 https://docs.swift.org/swift-book/LanguageGuide/Subscripts.html</li>
+</ol>
+
+  </div>
+
+  <div class="pagination">
+    
+      <span class="prev" >
+          <a href="http://localhost:4000/Kingfisher%E6%BA%90%E7%A0%81%E5%AF%BC%E8%AF%BB/">
+            &#xE000; Kingfisher源码导读
+          </a>
+      </span>
+    
+    
+  </div>
+
+  
+</article>
+
+    </div>
+
+    <div class="wrapper-footer">
+      <div class="container">
+        <footer class="footer">
+          <!-- Refer to https://codepen.io/ruandre/pen/howFi -->
+<ul class="svg-icon">
+
+  
+
+  
+  <li><a href="https://dribbble.com/hytaoist" class="icon-7 dribbble" title="Dribbble"><svg viewBox="0 0 512 512"><path d="M256 68.4C152.4 68.4 68.4 152.4 68.4 256c0 103.6 84 187.6 187.6 187.6S443.6 359.6 443.6 256C443.6 152.4 359.6 68.4 256 68.4zM410.6 247.3c-40.3-6.6-77.3-7-111-1.1 -3.8-8.8-7.8-17.6-12-26.3 36.1-15.6 65.1-36.9 86.7-63.8C395.4 181 408.6 212.6 410.6 247.3zM350.5 133.4c-18.8 24.3-44.8 43.5-78 57.5 -15.9-29.1-34-57.5-54.5-85 12.2-3.1 24.9-4.9 38-4.9C291.6 101 324.3 113.2 350.5 133.4zM186.1 117.9c20.8 27.2 39.3 55.3 55.3 84.1 -38 11.2-83.4 16.9-135.8 17.3C116.4 175 146.3 138.1 186.1 117.9zM101 256c0-1.3 0.2-2.7 0.2-4 60.2-0.1 112.1-7 155.6-20.7 3.6 7.4 7.1 14.9 10.5 22.4 -52.8 16.5-96.4 50.4-130.3 101.3C114.5 328.2 101 293.6 101 256zM160.9 378.1c30.8-48.3 70.1-79.7 118.8-94.2 14.5 37.8 25.2 76.8 31.9 116.6 -17.3 6.7-36 10.5-55.6 10.5C220.1 411 187.2 398.6 160.9 378.1zM342 384.8c-6.9-36.8-16.9-72.8-30-107.8 29.3-4.1 61.6-3.1 96.9 3.1C402.1 323.6 377.2 361.3 342 384.8z"/></svg><!--[if lt IE 9]><em>Dribbble</em><![endif]--></a></li>
+  
+
+  
+  <li><a href="mailto:hytaoist@foxmail.com" class="icon-8 email" title="Email"><svg viewBox="0 0 512 512"><path d="M101.3 141.6v228.9h0.3 308.4 0.8V141.6H101.3zM375.7 167.8l-119.7 91.5 -119.6-91.5H375.7zM127.6 194.1l64.1 49.1 -64.1 64.1V194.1zM127.8 344.2l84.9-84.9 43.2 33.1 43-32.9 84.7 84.7L127.8 344.2 127.8 344.2zM384.4 307.8l-64.4-64.4 64.4-49.3V307.8z"/></svg><!--[if lt IE 9]><em>Email</em><![endif]--></a></li>
+  
+
+  
+
+  
+
+  
+  <li><a href="https://github.com/hytaoist" class="icon-13 github" title="GitHub"><svg viewBox="0 0 512 512"><path d="M256 70.7c-102.6 0-185.9 83.2-185.9 185.9 0 82.1 53.3 151.8 127.1 176.4 9.3 1.7 12.3-4 12.3-8.9V389.4c-51.7 11.3-62.5-21.9-62.5-21.9 -8.4-21.5-20.6-27.2-20.6-27.2 -16.9-11.5 1.3-11.3 1.3-11.3 18.7 1.3 28.5 19.2 28.5 19.2 16.6 28.4 43.5 20.2 54.1 15.4 1.7-12 6.5-20.2 11.8-24.9 -41.3-4.7-84.7-20.6-84.7-91.9 0-20.3 7.3-36.9 19.2-49.9 -1.9-4.7-8.3-23.6 1.8-49.2 0 0 15.6-5 51.1 19.1 14.8-4.1 30.7-6.2 46.5-6.3 15.8 0.1 31.7 2.1 46.6 6.3 35.5-24 51.1-19.1 51.1-19.1 10.1 25.6 3.8 44.5 1.8 49.2 11.9 13 19.1 29.6 19.1 49.9 0 71.4-43.5 87.1-84.9 91.7 6.7 5.8 12.8 17.1 12.8 34.4 0 24.9 0 44.9 0 51 0 4.9 3 10.7 12.4 8.9 73.8-24.6 127-94.3 127-176.4C441.9 153.9 358.6 70.7 256 70.7z"/></svg><!--[if lt IE 9]><em>GitHub</em><![endif]--></a></li>
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+  <li><a href="https://www.twitter.com/hytaoist" class="icon-26 twitter" title="Twitter"><svg viewBox="0 0 512 512"><path d="M419.6 168.6c-11.7 5.2-24.2 8.7-37.4 10.2 13.4-8.1 23.8-20.8 28.6-36 -12.6 7.5-26.5 12.9-41.3 15.8 -11.9-12.6-28.8-20.6-47.5-20.6 -42 0-72.9 39.2-63.4 79.9 -54.1-2.7-102.1-28.6-134.2-68 -17 29.2-8.8 67.5 20.1 86.9 -10.7-0.3-20.7-3.3-29.5-8.1 -0.7 30.2 20.9 58.4 52.2 64.6 -9.2 2.5-19.2 3.1-29.4 1.1 8.3 25.9 32.3 44.7 60.8 45.2 -27.4 21.4-61.8 31-96.4 27 28.8 18.5 63 29.2 99.8 29.2 120.8 0 189.1-102.1 185-193.6C399.9 193.1 410.9 181.7 419.6 168.6z"/></svg><!--[if lt IE 9]><em>Twitter</em><![endif]--></a></li>
+  
+
+  
+
+</ul>
+
+
+
+<p>© 2020 hy</p>
+
+        </footer>
+      </div>
+    </div>
+
+    
+
+  </body>
+</html>

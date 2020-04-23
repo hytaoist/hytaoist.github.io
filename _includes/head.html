@@ -1,42 +1,15 @@
 <head>
+  <title>{% if page.title %}{{ page.title }} – {% endif %}{{ site.name }} – {{ site.description }}</title>
 
-  <title>
-    {% if page.title == "Home" %}
-      {{ site.title }} | {{ site.description }}
-    {% else %}
-      {{ page.title }} | {{ site.title }}
-    {% endif %}
-  </title>
+  {% include meta.html %}
+  {% include fonts.html %}
 
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta charset="utf-8">
+  <!--[if lt IE 9]>
+    <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+  <![endif]-->
 
-  <link rel="stylesheet" href="/assets/css/main.css">
-  <link rel="stylesheet" href="/assets/css/syntax.css">
-  <!-- Use Atom -->
-  {% feed_meta %}
-  <!-- Use RSS-2.0 -->
-  <!--<link href="{{ site.github.url }}/rss-feed.xml" type="application/rss+xml" rel="alternate" title="{{ site.title }} | {{ site.description }}"/>
-  //-->
+  <link rel="stylesheet" type="text/css" href="{{ site.baseurl }}/style.css" />
+  <link rel="alternate" type="application/rss+xml" title="{{ site.name }} - {{ site.description }}" href="{{ site.baseurl }}/feed.xml" />
 
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Serif:400,400italic,700%7CPT+Sans:400">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Code+Pro">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Quattrocento+Sans">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
-
-  <script type="text/javascript" async
-    src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-MML-AM_CHTML">
-    MathJax.Hub.Config({
-        tex2jax: {
-          inlineMath: [['$', '$'], ['\\(', '\\)']]
-        }
-      });
-  </script>
-
-  <!-- Google Analytics -->
-  {% include google-analytics.html %}
-
-  <!-- Use Jekyll SEO plugin -->
-  {% seo %}
-
+  <!-- Created with Jekyll Now - http://github.com/barryclark/jekyll-now -->
 </head>
