@@ -20,7 +20,13 @@ $helveticaNeue: "Helvetica Neue", Helvetica, Arial, sans-serif;
 $georgia: Georgia, serif;
 
 // Fonts
-$base-font: 'Spoqa Han Sans', 'Source Sans Pro', 'Apple SD Gothic Neo', 'Nanum Barun Gothic', 'Nanum Gothic', 'Verdana', 'Arial', 'Dotum', sans-serif;
+// 字体 来自：https://blog.mutoo.im/2020/02/fonts-for-my-blog-theme/
+// $fonts-sans-serif: Roboto, Helvetica, Tahoma, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei", "Noto Sans CJK", sans-serif;
+// $fonts-serif: Georgia, "Times New Roman", PMingLiu, STSong, SimSun, "WenQuanYi Bitmap Song", "Noto Serif CJK", serif;
+// $fonts-monospace: JetBrainsMono, "Source Code Pro", Monaco, Menlo, Consolas, "Courier New", Courier, monospace;
+
+// $base-font: 'Spoqa Han Sans', 'Source Sans Pro','AppleSDGothicNeo-Regular','Trebuchet MS','SF Compact Display','Microsoft YaHei','Apple SD Gothic Neo', 'Nanum Barun Gothic', 'Nanum Gothic', 'Verdana', 'Arial', 'Dotum', sans-serif;
+$base-font: 'AppleSDGothicNeo-Regular','Trebuchet MS', 'SF Compact Display';
 $code-font: 'Menlo', 'Courier New', 'Monaco', 'Spoqa Han Sans', monospace;
 
 // Font sizes
