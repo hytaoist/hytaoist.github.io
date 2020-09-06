@@ -38,7 +38,7 @@ extension KingfisherCompatibleValue {
 ```
 
 ### setImage()
-在设置图片的时候，无论是UIImageView，UIButton，NSButton都调用了`setImage()` 。这个方法核心的功能，在于使用KingfisherManager的`retrieveImage`来生成下载任务，并且将下载任务存储到当前实例的KingfisherWrapper的imageTask属性。但是在KingfisherWrapper中并没有定义imageTask属性，这个怎么做到的？使用了**关联对象**来动态存取。
+在设置图片的时候，无论是`UIIMageView`，UIButton，NSButton都调用了`setImage()` 。这个方法核心的功能，在于使用KingfisherManager的`retrieveImage`来生成下载任务，并且将下载任务存储到当前实例的KingfisherWrapper的imageTask属性。但是在KingfisherWrapper中并没有定义imageTask属性，这个怎么做到的？使用了**关联对象**来动态存取。
 ```swift
 private var imageTask: DownloadTask? {
     get { return getAssociatedObject(base, &imageTaskKey) }

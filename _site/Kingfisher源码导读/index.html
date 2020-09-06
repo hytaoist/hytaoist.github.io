@@ -131,7 +131,7 @@
 </code></pre></div></div>
 
 <h3 id="setimage">setImage()</h3>
-<p>在设置图片的时候，无论是UIImageView，UIButton，NSButton都调用了<code class="highlighter-rouge">setImage()</code> 。这个方法核心的功能，在于使用KingfisherManager的<code class="highlighter-rouge">retrieveImage</code>来生成下载任务，并且将下载任务存储到当前实例的KingfisherWrapper的imageTask属性。但是在KingfisherWrapper中并没有定义imageTask属性，这个怎么做到的？使用了<strong>关联对象</strong>来动态存取。</p>
+<p>在设置图片的时候，无论是<code class="highlighter-rouge">UIIMageView</code>，UIButton，NSButton都调用了<code class="highlighter-rouge">setImage()</code> 。这个方法核心的功能，在于使用KingfisherManager的<code class="highlighter-rouge">retrieveImage</code>来生成下载任务，并且将下载任务存储到当前实例的KingfisherWrapper的imageTask属性。但是在KingfisherWrapper中并没有定义imageTask属性，这个怎么做到的？使用了<strong>关联对象</strong>来动态存取。</p>
 <div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">private</span> <span class="k">var</span> <span class="nv">imageTask</span><span class="p">:</span> <span class="kt">DownloadTask</span><span class="p">?</span> <span class="p">{</span>
     <span class="k">get</span> <span class="p">{</span> <span class="k">return</span> <span class="nf">getAssociatedObject</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">imageTaskKey</span><span class="p">)</span> <span class="p">}</span>
     <span class="k">set</span> <span class="p">{</span> <span class="nf">setRetainedAssociatedObject</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">imageTaskKey</span><span class="p">,</span> <span class="n">newValue</span><span class="p">)}</span>
