@@ -14,5 +14,5 @@ jobs:
       - run: hugo --minify
       - uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.PUSHACCESSTOKEN }}
           publish_dir: ./public
