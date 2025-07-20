@@ -2,11 +2,18 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Posts on </title>
-    <link>/posts/</link>
+    <link>//localhost:1313/posts/</link>
     <description>Recent content in Posts on </description>
     <generator>Hugo</generator>
     <language>en</language>
-    <lastBuildDate></lastBuildDate>
-    <atom:link href="/posts/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Sun, 20 Jul 2025 17:29:17 +0800</lastBuildDate>
+    <atom:link href="//localhost:1313/posts/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>一汽大众签到助手</title>
+      <link>//localhost:1313/posts/%E4%B8%80%E6%B1%BD%E5%A4%A7%E4%BC%97%E7%AD%BE%E5%88%B0%E5%8A%A9%E6%89%8B/</link>
+      <pubDate>Sun, 20 Jul 2025 17:29:17 +0800</pubDate>
+      <guid>//localhost:1313/posts/%E4%B8%80%E6%B1%BD%E5%A4%A7%E4%BC%97%E7%AD%BE%E5%88%B0%E5%8A%A9%E6%89%8B/</guid>
+      <description>&lt;p&gt;2023年底拥有了一辆一汽大众的燃油小车，开始了有车生活。在官方App上有个签到获得积分的功能，积分可以去兑换汽车周边商品。但是这个签到每天只得一积分，连续签到后开盲盒最少能获得8个积分，签到流程有点繁琐，以至于时常忘记。&lt;/p&gt;&#xA;&lt;p&gt;24年的某一天，突然想到能不能自动签到呢？于是就开始抓包接口，看调用逻辑似乎可以实现。经过了几次调整，达到了比较理想的效果。&lt;/p&gt;&#xA;&lt;ul&gt;&#xA;&lt;li&gt;每天定时执行签到&lt;/li&gt;&#xA;&lt;li&gt;连续签到后可自动开盲盒&lt;/li&gt;&#xA;&lt;li&gt;不会将App的登录状态踢下线&lt;/li&gt;&#xA;&lt;/ul&gt;&#xA;&lt;p&gt;如果您是一汽大众的车主，不妨试试这个应用，纯开源免费应用。https://github.com/hytaoist/faw-vw-auto&lt;/p&gt;</description>
+    </item>
   </channel>
 </rss>
